@@ -40,10 +40,13 @@ local function bool(t) return t and "1" or "0" end
 local MPD = {}
 
 ---Get an MPD server connection handle.
-function connect(host, port)
+-- @param reconnect Whether to automatically reconnect. Default is true.
+function connect(host, port, reconnect)
+   if reconnect == nil then reconnect = true end
    local host, port = host or "localhost", port or 6600
    local s = assert(socket.connect(host, port))
-   local m = setmetatable({_s=s, _host=host, _port=port},
+   local m = setmetatable({_s=s, _reconnect=reconnect,
+                           _host=host, _port=port },
                           {__index=MPD})
    local ok, err = m:connect()
    if ok then return m else return false, err end
@@ -66,7 +69,18 @@ function MPD:send(cmd)
    if type(cmd) == "string" then cmd = { cmd } end
    local msg = concat(cmd, " ") .. "\r\n"
    if DEBUG then print("SEND: ", msg) end
-   return s:send(msg)
+   local ok, err = s:send(msg)
+   if ok then return ok
+   elseif err == "closed" and self._reconnect then
+      ok, err = self:connect()
+      if ok then
+         return self:send(cmd) --retry
+      else
+         return false, err
+      end
+   else
+      return false, err
+   end
 end
 
 -- Process a response, either a list, k/v table,
@@ -105,13 +119,14 @@ function MPD:receive(rform)
    rform = rform or "line"
    local s = assert(self._s)
    local buf = {}
-   local line = s:receive()
-   if line:match("^ACK") then return false, line end
-   while line do
+
+   while true do
+      local line, err = s:receive()
+      if not line then return false, err end
       if DEBUG then print("GOT: ", line) end
+      if line == "OK" then break
+      elseif line:match("^ACK") then return false, line end
       buf[#buf+1] = line
-      if line == "OK" then break end
-      line = s:receive()
    end
 
    return parse_buf(rform, buf)
@@ -119,9 +134,21 @@ end
 
 --Send command, get response.
 function MPD:sendrecv(cmd, response_form)
-   local ok, err = self:send(cmd)
-   if not ok then return false, err end
-   return self:receive(response_form)
+   local res, err = self:send(cmd)
+   if not res then return false, err end
+   res, err = self:receive(response_form)
+   if res then
+      return res
+   elseif err == "closed" and self._reconnect then
+      local ok, err2 = self:connect()
+      if ok then
+         return self:sendrecv(cmd, response_form) --retry
+      else
+         return false, err2
+      end
+   else
+      return false, err
+   end
 end
 
 ---Clear last error.
