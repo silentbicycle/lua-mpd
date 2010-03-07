@@ -1,4 +1,4 @@
---[[
+--[=====================================================================[
 Copyright (c) 2010 Scott Vokes <vokes.s@gmail.com>
 
 Permission to use, copy, modify, and/or distribute this software for any
@@ -12,14 +12,13 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
---]]
+--]=====================================================================]
 
 require "socket"
 
 -- TODO:
 -- * set up basic typechecking for args,
 --    "bad argument to string.format" is not a good error msg...
--- * try reconnect as necessary
 
 --Dependencies
 local socket = socket
@@ -28,7 +27,7 @@ local assert, ipairs, print, setmetatable, tostring, type =
    assert, ipairs, print, setmetatable, tostring, type
 
 
----Client libary for mpd
+---A Lua client libary for mpd.
 module("mpd")
 
 ---If set to true, will trace out transmissions.
@@ -41,6 +40,8 @@ local MPD = {}
 
 ---Get an MPD server connection handle.
 -- @param reconnect Whether to automatically reconnect. Default is true.
+-- @param host Default: "localhost"
+-- @param port Default: 6600
 function connect(host, port, reconnect)
    if reconnect == nil then reconnect = true end
    local host, port = host or "localhost", port or 6600
@@ -336,7 +337,7 @@ end
 
 ---Displays a list of all songs in the playlist, or if the optional
 -- argument is given, displays information only for the song SONGPOS or
--- the range of songs START:END [4]
+-- the range of songs START:END
 function MPD:playlistinfo(spec)
    spec = spec or ""
    return self:sendrecv(fmt("playlistinfo %s", spec), "table-list")
